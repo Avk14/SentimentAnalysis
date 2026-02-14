@@ -11,11 +11,8 @@ from tensorflow import keras
 from tensorflow.keras import layers
 import os
 import pickle
+import re
 
-
-nltk.download('punkt')
-nltk.download('stopwords')
-nltk.download('punkt_tab')
 
 MAX_SEQUENCE_LENGTH = 35
 EMBEDDING_DIM = 70 # From Word2Vec vector_size
@@ -117,9 +114,12 @@ class TransformerBlock(layers.Layer):
 
 class SentimentAI:
     def __init__(self):
-        self.model = self.load_model()  # Attempt to load pre-trained model if available
+        self.model = self.load_model() 
         preprocessing_loaded = self.load_preprocessing()
         if self.model is None or not preprocessing_loaded:
+            nltk.download('punkt')
+            nltk.download('stopwords')
+            nltk.download('punkt_tab')
             train_df = pd.read_csv("train.csv", encoding="latin1")
             test_df = pd.read_csv("test.csv", encoding="latin1")
 
@@ -134,7 +134,7 @@ class SentimentAI:
             self.test_data = self.preprocess_data(test_df)
 
             self.model = self.train_model(self.train_data)
-            self.save_model()  # Save the trained model for future use
+            self.save_model() 
 
     def _clean_text(self, text):
         tokens = word_tokenize(str(text))
@@ -217,7 +217,7 @@ class SentimentAI:
         for _ in range(2): # Use 2 transformer blocks
             x = TransformerBlock(EMBEDDING_DIM, NUM_HEADS, FF_DIM)(x)
 
-        x = layers.GlobalAveragePooling1D()(x) # Corrected typo
+        x = layers.GlobalAveragePooling1D()(x) 
         # x = layers.Dropout(0.1)(x)
         x = layers.Dense(10, activation="relu")(x)
         # x = layers.Dropout(0.1)(x)
@@ -236,7 +236,7 @@ class SentimentAI:
             X,
             y,
             batch_size=64,
-            epochs=40, # Reduced epochs for faster execution in example
+            epochs=40, 
             validation_split=0.1
         )
         print("Transformer model trained.")
@@ -289,13 +289,19 @@ class SentimentAI:
         sequence = self._texts_to_sequences([cleaned_tokens])
 
         prediction = self.model.predict(sequence)[0]
-        print("Model Prediction (probabilities):", prediction)  # Debugging print statement
+        print("Model Prediction (probabilities):", prediction) 
         predicted_class = np.argmax(prediction)
 
         sentiment_map = {0: "Negative", 1: "Neutral", 2: "Positive"}
         return sentiment_map[predicted_class], prediction
 
 
+ 
+def split_into_sentences(text):
+    # Simple sentence splitter
+    sentences = re.split(r'[.!?]+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    return sentences
 
 def analyze_sentiment(sentiment_ai, text):
     sentiment_result, scores = sentiment_ai.analyze_sentiment(text)
@@ -326,12 +332,15 @@ st.set_page_config(
 with st.sidebar:
     st.title("Sentiment Analysis Dashboard")
     st.markdown("### Model Parameters")
-    st.markdown("**Model Type:** BERT-base-uncased")
-    st.markdown("**Libraries:** Transformers, NLTK")
+    st.markdown("**Model Type:** Custom Transformer + Word2Vec")
+    st.markdown("**Libraries:** TensorFlow, NLTK, Gensim")
     st.markdown("**Preprocessing:**")
-    st.markdown("- Tokenization")
-    st.markdown("- Lemmatization")
-    st.markdown("- Stopword Removal")
+    st.markdown("- Tokenization (NLTK)")
+    st.markdown("- Lowercasing")
+    st.markdown("- Remove Non-Alphabetic Tokens")
+    st.markdown("- Remove Short Words")
+    st.markdown("- Word2Vec Embeddings")
+    st.markdown("- Padding & Sequence Encoding")
 
 # -----------------------------
 # Main UI
@@ -353,9 +362,29 @@ uploaded_file = st.file_uploader(
     type=["txt", "csv"]
 )
 
-if uploaded_file:
-    text_input = uploaded_file.read().decode("utf-8")
-    st.success("File uploaded successfully")
+if uploaded_file is not None:
+    content = uploaded_file.read().decode("utf-8")
+
+    # Split into sentences
+    sentences = split_into_sentences(content)
+    if sentences:
+        st.subheader("Sentence-wise Sentiment Analysis for uploaded document")
+        results = []
+        for sentence in sentences:
+            sentiment, probabilities = sentiment_ai.analyze_sentiment(sentence)
+            confidence = max(probabilities)
+            results.append({
+                "Sentence": sentence,
+                "Predicted Sentiment": sentiment,
+                "Confidence (%)": round(confidence * 100, 2)
+            })
+        # Display as table
+        import pandas as pd
+        df_results = pd.DataFrame(results)
+        st.dataframe(df_results, use_container_width=True)
+    else:
+        st.warning("No valid sentences found in the uploaded file.")
+
 
 # -----------------------------
 # Output Section
@@ -382,7 +411,7 @@ if analyze_btn:
         # -----------------------------
         # Overall Sentiment Badge
         # -----------------------------
-        st.markdown("### OVERALL SENTIMENT")
+        st.markdown("### SENTIMENT ANALYSIS for Input Text")
         st.markdown(
             f"""
             <div style="
